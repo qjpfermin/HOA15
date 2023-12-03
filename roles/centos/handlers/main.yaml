@@ -1,0 +1,15 @@
+---
+- name: Restarting nova
+  service:
+    name: openstack-nova-api.service 
+  failed_when: false
+  no_log: true
+
+- name: Restarting httpd and memcached
+  service:
+    name: 
+      - httpd
+      - memcached
+    state: restarted
+  failed_when: false
+  no_log: true

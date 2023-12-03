@@ -1,0 +1,95 @@
+---
+- name: Ensure Cinder database exists
+  mysql_db:
+    name: cinder
+    state: present
+  become_user: root
+
+- name: Grant privileges on Cinder database to 'cinder'@'localhost'
+  mysql_user:
+    name: cinder
+    host: localhost
+    password: 'cinderpass'
+    priv: 'cinder.*:ALL'
+    state: present
+  become_user: root
+
+- name: Grant privileges on Cinder database to 'cinder'@'%'
+  mysql_user:
+    name: cinder
+    host: '%'
+    password: 'cinderpass'
+    priv: 'cinder.*:ALL'
+    state: present
+  become_user: root
+
+- name: Sourcing the admin credentials
+  command: source /home/cserver/admin-openrc
+  failed_when: false
+  no_log: true
+
+- name: Creating cinder user
+  become_user: root
+  expect:
+    command: openstack user create --domain default --password-prompt cinder
+    reponses:
+      "User Password": cinderpass
+      "Repeat User Password": cinderpass
+  failed_when: false
+  no_log: true
+
+
+- name: Creating cinderv2 and cinderv3 service entities
+  shell: |
+    openstack service create --name cinderv2 --description "OpenStack Block Storage" volumev2
+    openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
+  failed_when: false
+  no_log: true
+
+- name: Creating a block storage service API endpoints
+  shell: |
+    openstack endpoint create --region RegionOne volumev2 public http://controller:8776/v2/%\(project_id\)s
+    openstack endpoint create --region RegionOne volumev2 internal http://controller:8776/v2/%\(project_id\)s
+    openstack endpoint create --region RegionOne volumev2 admin http://controller:8776/v2/%\(project_id\)s
+    openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
+    openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
+    openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3/%\(project_id\)s
+  failed_when: false
+  no_log: true
+
+- name: Installing cinder
+  yum:
+    name: openstack-cinder
+
+- name: Configuring cinder config file
+  copy:
+    src: cinder.conf
+    dest: /etc/cinder/cinder.conf
+    owner: root
+    group: cinder
+    mode: 0640
+
+- name: Configuring nova config file
+  copy:
+    src: nova.conf
+    dest: /etc/nova/nova.conf
+    owner: root
+    group: nova
+    mode: 640
+  notify: Restarting nova
+
+- name: Populating the Block Storage database
+  become_user: root
+  command: su -s /bin/sh -c "cinder-manage db sync" cinder
+  failed_when: false
+  no_log: true
+
+- name: Starting and enabling cinder service
+  service:
+    name:
+      - openstack-cinder-api.service 
+      - openstack-cinder-scheduler.service
+    state: started
+    enabled: true
+  failed_when: false
+  no_log: true

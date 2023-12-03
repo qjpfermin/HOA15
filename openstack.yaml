@@ -1,0 +1,11 @@
+---
+- name: Installing Open Stack Prerequisite
+  hosts: centos
+  become: true
+  roles:
+    - centos
+
+#- hosts: ubuntu
+#  become: true
+#  roles:
+#    - ubuntu
